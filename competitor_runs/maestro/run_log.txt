@@ -1,0 +1,24 @@
+
+Maestro Android driver did not start up in time  ---  emulator [ emulator-5554 ] & port  [ dadb.open( tcp:7001 ) ]
+
+The stack trace was:
+maestro.MaestroDriverStartupException$AndroidDriverTimeoutException: Maestro Android driver did not start up in time  ---  emulator [ emulator-5554 ] & port  [ dadb.open( tcp:7001 ) ]
+	at maestro.drivers.AndroidDriver.awaitLaunch(AndroidDriver.kt:162)
+	at maestro.drivers.AndroidDriver.open(AndroidDriver.kt:108)
+	at maestro.Maestro$Companion.android(Maestro.kt:690)
+	at maestro.cli.session.MaestroSessionManager.createAndroid(MaestroSessionManager.kt:346)
+	at maestro.cli.session.MaestroSessionManager.createMaestro(MaestroSessionManager.kt:207)
+	at maestro.cli.session.MaestroSessionManager.newSession(MaestroSessionManager.kt:106)
+	at maestro.cli.session.MaestroSessionManager.newSession$default(MaestroSessionManager.kt:66)
+	at maestro.cli.command.TestCommand.runShardSuite(TestCommand.kt:476)
+	at maestro.cli.command.TestCommand.access$runShardSuite(TestCommand.kt:80)
+	at maestro.cli.command.TestCommand$handleSessions$1$results$1$1.invokeSuspend(TestCommand.kt:435)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.internal.LimitedDispatcher$Worker.run(LimitedDispatcher.kt:124)
+	at kotlinx.coroutines.scheduling.TaskImpl.run(Tasks.kt:89)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler.runSafely(CoroutineScheduler.kt:586)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.executeTask(CoroutineScheduler.kt:820)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.runWorker(CoroutineScheduler.kt:717)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.run(CoroutineScheduler.kt:704)
+

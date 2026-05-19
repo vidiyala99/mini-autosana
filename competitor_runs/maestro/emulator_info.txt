@@ -1,0 +1,5 @@
+sdk_gphone16k_x86_64
+17
+x86_64
+16KB page size: yes (sdk_gphone16k_*)
+Maestro CLI version: 2.5.1
