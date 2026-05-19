@@ -10,18 +10,18 @@ On 150 web trials: ctx=1 succeeded 0/75 (strict); ctx=3 succeeded 16/75 (strict)
 
 ## Web — context window A/B
 
-| Condition | N | Strict | Judge-only | Hidden | p50 latency | p50 steps | $/task |
-|---|---|---|---|---|---|---|---|
-| web ctx=1 | 75 | 0.0% | 20.0% | 15 | 41951 ms | 22 | $0.0578 |
-| web ctx=3 | 75 | 21.3% | 41.3% | 15 | 38227 ms | 15 | $0.0931 |
+| Condition | N | Strict | Judge-only | Hidden | False claim | p50 latency | p50 steps | $/task |
+|---|---|---|---|---|---|---|---|---|
+| web ctx=1 | 75 | 0.0% | 20.0% | 15 | 0 | 41951 ms | 22 | $0.0578 |
+| web ctx=3 | 75 | 21.3% | 41.3% | 15 | 25 | 38227 ms | 15 | $0.0931 |
 
-**Reading the columns:** `Strict` = agent called done(success) AND judge agreed. `Judge-only` = judge approved the final screenshot, regardless of whether agent recognized completion. `Hidden` = count where judge passed but agent didn't claim done (these inflate Judge-only above Strict).
+**Reading the columns:** `Strict` = agent called done(success) AND judge agreed. `Judge-only` = judge approved the final screenshot, regardless of whether agent recognized completion. `Hidden` = judge passed but agent didn't claim done (these inflate Judge-only above Strict — the 'agent didn't recognize completion' failure mode). `False claim` = agent claimed success but judge said no (the mirror failure mode — agent self-assessment is wrong; e.g. typed 'buy milk' twice and called it done).
 
 ## Mobile — cross-platform grounding
 
-| Condition | N | Strict | Judge-only | Hidden | p50 latency | p50 steps | $/task |
-|---|---|---|---|---|---|---|---|
-| mobile ctx=1 | 24 | 12.5% | 20.8% | 2 | 42073 ms | 22 | $0.0752 |
+| Condition | N | Strict | Judge-only | Hidden | False claim | p50 latency | p50 steps | $/task |
+|---|---|---|---|---|---|---|---|---|
+| mobile ctx=1 | 24 | 12.5% | 20.8% | 2 | 0 | 42073 ms | 22 | $0.0752 |
 
 Mobile uses ctx=1 only — the comparison is web-vs-mobile grounding on the same agent loop, not a context-window A/B.
 
@@ -65,8 +65,10 @@ _Taxonomy is keyword-bucketed from run summaries. For deeper analysis, walk the 
 
 ## Known methodology limits
 
-- **Judge sees only the final screenshot.** For tasks whose success condition is met by the page's *initial* state (e.g. `todo_add_delete` checks 'is the list empty?' — and it starts empty), the judge can falsely approve a trial where the agent did nothing. The trajectory should be checked, not just the terminal state.
+- **Judge sees only the final screenshot in these published numbers.** For tasks whose success condition is met by the page's *initial* state (e.g. `todo_add_delete` checks 'is the list empty?' — and it starts empty), the judge can falsely approve a trial where the agent did nothing. **Fixed in current code** (see `KNOWN_FIXES.md`): `assert_condition` now accepts the last few trajectory frames; the snapshot above was taken before that change.
 - **Strict success is conservative.** It requires both judge agreement AND the agent self-recognizing completion via `done`. Real testing tools usually take the judge's word for it.
-- **n=5 web / n=3 mobile per cell.** Enough for the wins-grid to be readable but not for statistical power claims.
+- **n=5 web / n=3 mobile per cell, temperature=0.** This is treatment-effect sampling, not policy-stochasticity sampling — at temperature=0 with cached prompts, n=5 mostly measures eval-harness timing variance. Don't read the per-task wins as statistical confidence intervals.
+- **`MAX_STEPS=22` at time of these runs.** Forensic walk of `sauce_checkout` showed the agent reaching the Overview page (step 21) one click from success when max_steps fired. Most of the 0/5 cells on multi-stage form flows are step-budget exhaustion, not capability gaps. **Fixed in current code** (`MAX_STEPS_DEFAULT = 40`); see `KNOWN_FIXES.md` for the full list.
 - **Single model (Haiku 4.5).** Larger VLMs likely do better on the harder dropdown/grounding tasks.
 - **Coordinate-only input.** No DOM access by design. This is the same constraint that makes Autosana's selectorless pitch interesting AND hard.
+- **Cost number is Haiku-only.** Headline `$X.XX` above does not include Sonnet judge tokens (~$5-7 unaccounted at this volume). **Fixed in current code**: new runs populate `judge_input_tokens` / `judge_output_tokens`; historical rows have 0 and are excluded from any going-forward total.

@@ -53,6 +53,11 @@ class RunReport:
     total_cache_creation_tokens: int
     total_output_tokens: int
     total_latency_ms: int
+    # Sonnet judge token counts — defaulted to 0 because historical rows in
+    # results.jsonl predate this field. New runs populate them so the headline
+    # cost number can include the judge instead of footnoting it.
+    judge_input_tokens: int = 0
+    judge_output_tokens: int = 0
 
     def cost_usd(
         self,
@@ -66,3 +71,13 @@ class RunReport:
         cache_write = self.total_cache_creation_tokens * in_price_per_mtok * cache_creation_premium
         out = self.total_output_tokens * out_price_per_mtok
         return (fresh_in + cache_read + cache_write + out) / 1_000_000
+
+    def judge_cost_usd(
+        self,
+        judge_in_price_per_mtok: float,
+        judge_out_price_per_mtok: float,
+    ) -> float:
+        return (
+            self.judge_input_tokens * judge_in_price_per_mtok
+            + self.judge_output_tokens * judge_out_price_per_mtok
+        ) / 1_000_000

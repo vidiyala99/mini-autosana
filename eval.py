@@ -28,6 +28,8 @@ from shared.config import (
     HAIKU_INPUT_PRICE_PER_MTOK,
     HAIKU_OUTPUT_PRICE_PER_MTOK,
     RESULTS_PATH,
+    SONNET_INPUT_PRICE_PER_MTOK,
+    SONNET_OUTPUT_PRICE_PER_MTOK,
 )
 
 
@@ -43,6 +45,9 @@ DEFAULT_TRIALS_MOBILE = 3
 def _serialize(report: RunReport) -> dict:
     d = asdict(report)
     d["cost_usd"] = report.cost_usd(HAIKU_INPUT_PRICE_PER_MTOK, HAIKU_OUTPUT_PRICE_PER_MTOK)
+    d["judge_cost_usd"] = report.judge_cost_usd(
+        SONNET_INPUT_PRICE_PER_MTOK, SONNET_OUTPUT_PRICE_PER_MTOK,
+    )
     return d
 
 

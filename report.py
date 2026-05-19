@@ -60,8 +60,8 @@ def _platform_table(rows: list[dict], platform: str) -> str:
         return "_(no trials)_"
     groups = _group(rows, "context_window")
     lines = [
-        "| Condition | N | Strict | Judge-only | Hidden | p50 latency | p50 steps | $/task |",
-        "|---|---|---|---|---|---|---|---|",
+        "| Condition | N | Strict | Judge-only | Hidden | False claim | p50 latency | p50 steps | $/task |",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
     for ctx in sorted(groups):
         grp = groups[ctx]
@@ -72,12 +72,18 @@ def _platform_table(rows: list[dict], platform: str) -> str:
             1 for r in grp
             if r.get("judge_passed", False) and not r.get("agent_claimed_success", False)
         )
+        # False claim = agent claimed success but judge said no. Mirror of
+        # Hidden — surfaces the "agent self-assessment is wrong" failure mode.
+        false_claim = sum(
+            1 for r in grp
+            if r.get("agent_claimed_success", False) and not r.get("judge_passed", False)
+        )
         latencies = [r["total_latency_ms"] for r in grp if r["steps"]]
         steps = [len(r["steps"]) for r in grp if r["steps"]]
         cost = statistics.mean(r["cost_usd"] for r in grp) if grp else 0.0
         lines.append(
             f"| {platform} ctx={ctx} | {len(grp)} | {_pct(strict, len(grp))} "
-            f"| {_pct(judge, len(grp))} | {hidden} "
+            f"| {_pct(judge, len(grp))} | {hidden} | {false_claim} "
             f"| {int(statistics.median(latencies)) if latencies else 0} ms "
             f"| {int(statistics.median(steps)) if steps else 0} "
             f"| ${cost:.4f} |"
@@ -197,7 +203,7 @@ def generate(results_path: Path, report_path: Path) -> None:
         "",
         _platform_table(web_rows, "web"),
         "",
-        "**Reading the columns:** `Strict` = agent called done(success) AND judge agreed. `Judge-only` = judge approved the final screenshot, regardless of whether agent recognized completion. `Hidden` = count where judge passed but agent didn't claim done (these inflate Judge-only above Strict).",
+        "**Reading the columns:** `Strict` = agent called done(success) AND judge agreed. `Judge-only` = judge approved the final screenshot, regardless of whether agent recognized completion. `Hidden` = judge passed but agent didn't claim done (these inflate Judge-only above Strict — the 'agent didn't recognize completion' failure mode). `False claim` = agent claimed success but judge said no (the mirror failure mode — agent self-assessment is wrong; e.g. typed 'buy milk' twice and called it done).",
         "",
         "## Mobile — cross-platform grounding",
         "",
@@ -218,11 +224,13 @@ def generate(results_path: Path, report_path: Path) -> None:
         "",
         "## Known methodology limits",
         "",
-        "- **Judge sees only the final screenshot.** For tasks whose success condition is met by the page's *initial* state (e.g. `todo_add_delete` checks 'is the list empty?' — and it starts empty), the judge can falsely approve a trial where the agent did nothing. The trajectory should be checked, not just the terminal state.",
+        "- **Judge sees only the final screenshot in these published numbers.** For tasks whose success condition is met by the page's *initial* state (e.g. `todo_add_delete` checks 'is the list empty?' — and it starts empty), the judge can falsely approve a trial where the agent did nothing. **Fixed in current code** (see `KNOWN_FIXES.md`): `assert_condition` now accepts the last few trajectory frames; the snapshot above was taken before that change.",
         "- **Strict success is conservative.** It requires both judge agreement AND the agent self-recognizing completion via `done`. Real testing tools usually take the judge's word for it.",
-        "- **n=5 web / n=3 mobile per cell.** Enough for the wins-grid to be readable but not for statistical power claims.",
+        "- **n=5 web / n=3 mobile per cell, temperature=0.** This is treatment-effect sampling, not policy-stochasticity sampling — at temperature=0 with cached prompts, n=5 mostly measures eval-harness timing variance. Don't read the per-task wins as statistical confidence intervals.",
+        "- **`MAX_STEPS=22` at time of these runs.** Forensic walk of `sauce_checkout` showed the agent reaching the Overview page (step 21) one click from success when max_steps fired. Most of the 0/5 cells on multi-stage form flows are step-budget exhaustion, not capability gaps. **Fixed in current code** (`MAX_STEPS_DEFAULT = 40`); see `KNOWN_FIXES.md` for the full list.",
         "- **Single model (Haiku 4.5).** Larger VLMs likely do better on the harder dropdown/grounding tasks.",
         "- **Coordinate-only input.** No DOM access by design. This is the same constraint that makes Autosana's selectorless pitch interesting AND hard.",
+        "- **Cost number is Haiku-only.** Headline `$X.XX` above does not include Sonnet judge tokens (~$5-7 unaccounted at this volume). **Fixed in current code**: new runs populate `judge_input_tokens` / `judge_output_tokens`; historical rows have 0 and are excluded from any going-forward total.",
         "",
     ]
     report_path.write_text("\n".join(out), encoding="utf-8")

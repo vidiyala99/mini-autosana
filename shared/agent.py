@@ -13,6 +13,7 @@ trial as a slideshow without re-running the agent.
 from __future__ import annotations
 
 import json
+import logging
 import re
 import time
 from pathlib import Path
@@ -21,6 +22,8 @@ from shared.actions import Action, RunReport, StepRecord
 from shared.backend import Backend
 from shared.config import MAX_STEPS_DEFAULT
 from shared.vision import assert_condition, decide_action
+
+logger = logging.getLogger(__name__)
 
 
 _CLICK_LOOP_RADIUS_PX = 80
@@ -113,6 +116,13 @@ def _coerce_xy(args: dict) -> tuple[int, int]:
             continue
         candidates.extend(int(n) for n in re.findall(r"-?\d+", str(v)))
     if len(candidates) >= 2:
+        logger.warning(
+            "click-arg coercion fallback: tool returned non-integer "
+            "coordinates %r — extracted (%d, %d) from regex. "
+            "If this fires often it indicates a tool-use protocol bug "
+            "worth fixing upstream rather than papering over.",
+            args, candidates[0], candidates[1],
+        )
         return candidates[0], candidates[1]
     raise ValueError(f"could not extract (x, y) from click args: {args!r}")
 
@@ -163,6 +173,8 @@ async def run_task(
     final_summary = "max steps reached"
     agent_claimed_success = False
     judge_passed = False
+    judge_input_tokens = 0
+    judge_output_tokens = 0
     success = False
 
     try:
@@ -222,11 +234,24 @@ async def run_task(
             final_summary = f"max_steps={max_steps} reached without done"
 
         # Independent visual judge. Sonnet, with the goal as context.
+        # Pass up to 2 trajectory screenshots so the judge can distinguish
+        # "agent reached the success state" from "initial state == success
+        # state" (the todo_add_delete false-positive class).
         final_shot = await backend.screenshot()
         (run_dir / "final.png").write_bytes(final_shot)
-        judge_passed, explanation = await assert_condition(final_shot, success_check, goal)
+        trajectory_tail = screenshots[-3:-1] if len(screenshots) >= 2 else None
+        judge = await assert_condition(
+            final_shot, success_check, goal,
+            trajectory_screenshots=trajectory_tail,
+        )
+        judge_passed = judge.passed
+        judge_input_tokens = judge.input_tokens
+        judge_output_tokens = judge.output_tokens
         success = agent_claimed_success and judge_passed
-        final_summary = f"{final_summary} | judge: {explanation}" if explanation else final_summary
+        final_summary = (
+            f"{final_summary} | judge: {judge.explanation}"
+            if judge.explanation else final_summary
+        )
 
     finally:
         actions_log.close()
@@ -248,4 +273,6 @@ async def run_task(
         total_cache_creation_tokens=total_cc,
         total_output_tokens=total_out,
         total_latency_ms=total_lat,
+        judge_input_tokens=judge_input_tokens,
+        judge_output_tokens=judge_output_tokens,
     )

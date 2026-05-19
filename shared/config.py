@@ -21,7 +21,12 @@ WEB_HEADLESS = True
 MOBILE_VIEWPORT = (1080, 1920)
 MOBILE_ADB_SERIAL: str | None = None   # None = use the only attached device
 
-MAX_STEPS_DEFAULT = 22
+# Bumped from 22 → 40 after a sauce_checkout postmortem: at the old budget,
+# every ctx=3 trial reached the "Checkout: Overview" page (step 21) but ran
+# out of steps before clicking Finish. 22 was below the floor for any
+# multi-stage form flow; 40 gives the agent slack for misclicks without
+# inviting drift. Per-task budgets in tasks.py would be the real fix.
+MAX_STEPS_DEFAULT = 40
 
 # Anthropic Haiku 4.5 vision pricing as of 2026-05.
 # Update if pricing changes — cost_usd in actions.py reads these.

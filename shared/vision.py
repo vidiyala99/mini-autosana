@@ -108,8 +108,13 @@ ACTION_TOOLS = [
     {
         "name": "done",
         "description": (
-            "Terminate the run. Use success=true if the goal was reached, "
-            "false if you are stuck and cannot make progress."
+            "Terminate the run. Call done(success=true) AS SOON AS the success "
+            "condition is visible on screen — do NOT keep exploring after the "
+            "goal is met. Call done(success=false) only if you have made the "
+            "same kind of attempt 3+ times without the page changing, or if "
+            "you've concluded the goal is unreachable from the current state. "
+            "Calling done is not optional: at end of trial it determines "
+            "whether the trial counts as a pass."
         ),
         "input_schema": {
             "type": "object",
@@ -375,28 +380,59 @@ ASSERTION_TOOL = [
 ]
 
 
-JUDGE_SYSTEM = """You verify test assertions by looking at a final browser/mobile screenshot.
+JUDGE_SYSTEM = """You verify test assertions by looking at one or more browser/mobile screenshots from the end of a test run.
 
-You are told (1) the user's original goal, (2) a specific yes/no question to answer. Use the goal as context to interpret the question fairly — if the agent navigated to a totally different page that accidentally satisfies the literal phrasing of the question, the goal context will help you say 'no'.
+You are told (1) the user's original goal, (2) a specific yes/no question to answer. The goal is provided for context — use it to spot cases where the agent navigated to a totally different page that accidentally satisfies the literal phrasing of the question (in which case answer no). The goal does NOT override the question. Answer the yes/no question exactly as asked.
 
-Be strict but not pedantic. If the user goal is plainly satisfied on the screen, answer passed=true even if the question's exact phrasing has some ambiguity.
+If multiple screenshots are provided, they are the last frames of the trajectory in chronological order. The final screenshot is the terminal state; earlier frames let you distinguish "the agent reached the success state" from "the page already looked like this when the run started."
 
 Answer by calling the `answer` tool."""
+
+
+@dataclass
+class JudgeResult:
+    passed: bool
+    explanation: str
+    input_tokens: int
+    output_tokens: int
 
 
 async def assert_condition(
     screenshot: bytes,
     question: str,
     goal: str,
-) -> tuple[bool, str]:
-    """Return (passed, explanation).
+    *,
+    trajectory_screenshots: list[bytes] | None = None,
+) -> JudgeResult:
+    """Judge a trial. Returns passed + explanation + token usage.
 
-    Three things that matter here, all from the senior-eng review:
+    Four things that matter here, all from the senior-eng review:
     - JUDGE_MODEL is different from AGENT_MODEL: removes correlated errors.
     - `goal` is passed in: the judge sees the user's intent, not just the
       success question, so it can catch "agent succeeded at the wrong task."
-    - Tool-use enforced: judge must answer in schema, can't equivocate in prose.
+    - `trajectory_screenshots`: when provided, the judge sees the last few
+      frames before the terminal state in chronological order. This catches
+      the "initial state == success state" false-positive (e.g.
+      `todo_add_delete` checking 'is the list empty?' when the list starts
+      empty). Caller is expected to pass ~2-3 frames; more = costlier.
+    - Token usage returned so eval cost accounting can include judge tokens
+      (`cost_usd` historically tracked Haiku only).
     """
+    content_blocks: list[dict] = []
+    if trajectory_screenshots:
+        for img in trajectory_screenshots:
+            content_blocks.append(_image_block(img))
+    content_blocks.append(_image_block(screenshot))
+    content_blocks.append(
+        {
+            "type": "text",
+            "text": (
+                f"Original goal: {goal}\n\n"
+                f"Question to verify: {question}"
+            ),
+        }
+    )
+
     async def call():
         return await _client.messages.create(
             model=JUDGE_MODEL,
@@ -405,26 +441,18 @@ async def assert_condition(
             system=JUDGE_SYSTEM,
             tools=ASSERTION_TOOL,
             tool_choice={"type": "tool", "name": "answer"},
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        _image_block(screenshot),
-                        {
-                            "type": "text",
-                            "text": (
-                                f"Original goal: {goal}\n\n"
-                                f"Question to verify: {question}"
-                            ),
-                        },
-                    ],
-                }
-            ],
+            messages=[{"role": "user", "content": content_blocks}],
         )
 
     resp = await _with_retry(call, label="assert_condition")
+    in_tok, _, _, out_tok = _usage(resp)
     tool_block = next((b for b in resp.content if b.type == "tool_use"), None)
     if tool_block is None or not isinstance(tool_block.input, dict):
-        return False, "judge: no tool_use in response"
+        return JudgeResult(False, "judge: no tool_use in response", in_tok, out_tok)
     args = dict(tool_block.input)
-    return bool(args.get("passed", False)), str(args.get("explanation", ""))
+    return JudgeResult(
+        passed=bool(args.get("passed", False)),
+        explanation=str(args.get("explanation", "")),
+        input_tokens=in_tok,
+        output_tokens=out_tok,
+    )
