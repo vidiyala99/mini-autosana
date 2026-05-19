@@ -96,7 +96,7 @@ Three specific bets, grounded in the receipts above:
 
 I built a vision agent that does roughly what I think Autosana's agent does — same idea, much less polish, no self-healing, no diff-driven generation. It runs on **both web (Playwright) and Android (adb)** through the same agent loop, and includes a small eval harness so I could actually look at where it breaks.
 
-**Repo:** https://github.com/Aakash-Vidiyala/mini-autosana
+**Repo:** https://github.com/vidiyala99/mini-autosana
 
 I ran it on 174 trials (150 web + 24 mobile) using Claude Haiku 4.5 as the agent and Sonnet 4.6 as an independent visual judge. The numbers, deliberately unspun:
 
