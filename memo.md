@@ -14,7 +14,7 @@ Why this matters: every claim below is constrained by this scale — small team,
 
 ## The test scenario I'd want Autosana to run for me
 
-> Open app → log in (mocked auth in QA build) → browse the product list → add the cheapest item to cart → checkout → assert the order confirmation screen shows the right total. Run on iPhone 14 and Pixel 7. Run after each PR that touches the product list, cart, or checkout screens. (This is the e-commerce shape of `sauce_checkout`, which my prototype runs end-to-end against the web equivalent — see `RESULTS.md`.)
+> Open app → log in (mocked auth in QA build) → browse the product list → add the cheapest item to cart → checkout → assert the order confirmation screen shows the right total. Run on iPhone 14 and Pixel 7. Run after each PR that touches the product list, cart, or checkout screens. (This is the e-commerce shape of `sauce_checkout`, which my prototype *attempts* end-to-end against the web equivalent but currently fails 0/5 on — the dropdown-grounding wall and the step-budget exhaustion I describe below. That's the "I want a test agent" half of why I'm writing — and `KNOWN_FIXES.md` has the post-eval diagnostic and what I shipped after the snapshot.)
 
 Per-test budget I'd accept: **25 cents** and **90 seconds** of wall clock. Above that and the math stops working for our team size.
 
@@ -34,9 +34,9 @@ In priority order:
 
 ## What I tried instead — receipts
 
-I ran the equivalent of this flow on two competitors so I'd know what I was comparing you to.
+I ran the equivalent of this flow on the competitors I could actually touch so I'd know what I was comparing you to.
 
-### Maestro on Android — the same flow my own agent runs
+### Maestro on Android — a flow my own agent runs
 
 Full write-up + artifacts: `competitor_runs/maestro/` (YAML flow, crash log, emulator info).
 
